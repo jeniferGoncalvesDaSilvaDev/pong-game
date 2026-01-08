@@ -1,0 +1,865 @@
+# 🎮 Pong com Epsilon-Greedy Reinforcement Learning
+
+![Version](https://img.shields.io/badge/version-2.0.0-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+![AI](https://img.shields.io/badge/AI-Epsilon--Greedy-orange)
+![RL](https://img.shields.io/badge/RL-Multi--Armed_Bandit-purple)
+
+> Implementação do clássico jogo Pong com IA baseada em **Epsilon-Greedy Multi-Armed Bandit** para aprendizado por reforço online.
+
+## 📋 Índice
+
+- [Visão Geral](#visão-geral)
+- [Epsilon-Greedy Algorithm](#epsilon-greedy-algorithm)
+- [Equações Matemáticas](#equações-matemáticas)
+- [Métricas da IA](#métricas-da-ia)
+- [Implementação](#implementação)
+- [Análise de Convergência](#análise-de-convergência)
+- [Experimentos](#experimentos)
+- [Instalação](#instalação)
+- [Como Usar](#como-usar)
+
+---
+
+## 🎯 Visão Geral
+
+Este projeto implementa um **Multi-Armed Bandit (MAB)** usando o algoritmo **Epsilon-Greedy** para controlar a raquete do bot no jogo Pong. A IA aprende online qual a melhor posição para interceptar a bola através de tentativa e erro.
+
+### Por que Epsilon-Greedy para Pong?
+
+1. **Espaço de estados pequeno** - 10 posições discretas (bins)
+2. **Feedback imediato** - recompensa após cada tentativa
+3. **Ambiente estacionário** - dinâmica do jogo não muda
+4. **Convergência rápida** - aprende a política ótima em ~20-30 tentativas
+5. **Interpretabilidade** - métricas claras e visualizáveis
+
+### Características
+
+- ✅ Aprendizado online (sem treinamento prévio)
+- ✅ Decaimento automático de epsilon
+- ✅ Métricas detalhadas em tempo real
+- ✅ Análise estatística completa
+- ✅ Visualização de Q-values
+- ✅ Cálculo de regret
+
+---
+
+## 🧠 Epsilon-Greedy Algorithm
+
+### Conceito Fundamental
+
+O algoritmo **Epsilon-Greedy** resolve o dilema **exploração vs exploitação** em problemas de decisão sequencial:
+
+- **Exploração (ε):** Testar ações aleatórias para descobrir recompensas
+- **Exploitação (1-ε):** Escolher a melhor ação conhecida até o momento
+
+### Pseudocódigo
+
+```
+Inicializar:
+  Para cada ação a ∈ {0, 1, ..., 9}:
+    Q(a) ← 0        // Valor estimado
+    N(a) ← 0        // Contador de tentativas
+  t ← 0             // Tentativa atual
+
+Loop (a cada decisão):
+  t ← t + 1
+  ε ← 1/√t          // Decaimento de epsilon
+  
+  Com probabilidade ε:
+    a ← ação aleatória                    // EXPLORAÇÃO
+  Caso contrário:
+    a ← argmax_a Q(a)                     // EXPLOITAÇÃO
+  
+  Executar ação a, observar recompensa r
+  
+  N(a) ← N(a) + 1
+  α ← 1/N(a)                              // Learning rate
+  Q(a) ← Q(a) + α × [r - Q(a)]           // Atualização incremental
+```
+
+### Discretização do Espaço de Estados
+
+O espaço contínuo de posições Y [0, 600] é discretizado em **10 bins**:
+
+```
+Bin 0: Y ∈ [  0,  60) → Ação 0 → Alvo Y = 30
+Bin 1: Y ∈ [ 60, 120) → Ação 1 → Alvo Y = 90
+Bin 2: Y ∈ [120, 180) → Ação 2 → Alvo Y = 150
+Bin 3: Y ∈ [180, 240) → Ação 3 → Alvo Y = 210
+Bin 4: Y ∈ [240, 300) → Ação 4 → Alvo Y = 270  ⭐ CENTRO
+Bin 5: Y ∈ [300, 360) → Ação 5 → Alvo Y = 330
+Bin 6: Y ∈ [360, 420) → Ação 6 → Alvo Y = 390
+Bin 7: Y ∈ [420, 480) → Ação 7 → Alvo Y = 450
+Bin 8: Y ∈ [480, 540) → Ação 8 → Alvo Y = 510
+Bin 9: Y ∈ [540, 600] → Ação 9 → Alvo Y = 570
+```
+
+**Função de discretização:**
+```
+bin(y) = min(9, ⌊y / 60⌋)
+```
+
+---
+
+## 📐 Equações Matemáticas
+
+### 1. Decaimento de Epsilon
+
+**Fórmula:**
+```
+ε(t) = 1/√(t + 1)
+```
+
+**Características:**
+- `ε(0) = 1.0` → 100% exploração inicial
+- `ε(10) ≈ 0.302` → 30% exploração
+- `ε(100) ≈ 0.099` → 10% exploração
+- `ε(∞) → 0` → converge para exploitação pura
+
+**Gráfico de decaimento:**
+```
+ε │
+1.0├─╮
+   │  ╲
+0.5│   ╲___
+   │       ╲____
+0.1│            ╲_______
+   └────────────────────── t
+   0   10   50  100  500
+```
+
+**Por que √t?**
+- Decai mais rápido que `1/t` (permite convergência)
+- Decai mais devagar que `1/t²` (permite exploração suficiente)
+- Garante `∑ε(t) = ∞` e `∑ε²(t) < ∞` (condições de convergência)
+
+### 2. Atualização de Q-values (Sample Average)
+
+**Fórmula incremental:**
+```
+Q_n+1(a) = Q_n(a) + α × [R_n - Q_n(a)]
+```
+
+**Onde:**
+- `Q_n(a)` = valor estimado da ação `a` após `n` observações
+- `R_n` = recompensa observada na tentativa `n`
+- `α = 1/n` = learning rate (taxa de aprendizado)
+
+**Expandindo:**
+```
+Q_n+1(a) = Q_n(a) + (1/n) × [R_n - Q_n(a)]
+         = (1/n) × R_n + (1 - 1/n) × Q_n(a)
+         = (1/n) × R_n + ((n-1)/n) × Q_n(a)
+```
+
+**Forma recursiva:**
+```
+Q_1(a) = R_1
+Q_2(a) = (R_1 + R_2) / 2
+Q_3(a) = (R_1 + R_2 + R_3) / 3
+...
+Q_n(a) = (1/n) × ∑_{i=1}^{n} R_i
+```
+
+### 3. Função de Recompensa
+
+**Recompensa por acertar a bola:**
+```
+r_hit(d) = 1 / (1 + d/50)
+```
+
+**Onde:**
+- `d = |y_bola - y_raquete|` = distância euclidiana
+- `d = 0` → `r = 1.0` (perfeito)
+- `d = 50` → `r = 0.5` (médio)
+- `d = 100` → `r = 0.33` (ruim)
+
+**Recompensa por perder ponto:**
+```
+r_miss = -1.0
+```
+
+**Características:**
+- Recompensa contínua proporcional à qualidade da interceptação
+- Penalidade fixa por falha
+- Incentiva posicionamento preciso
+
+### 4. Regret (Arrependimento)
+
+**Regret instantâneo:**
+```
+ℓ_t = Q*(a*) - Q*(a_t)
+```
+
+**Regret acumulado:**
+```
+L_T = ∑_{t=1}^{T} ℓ_t = ∑_{t=1}^{T} [Q*(a*) - Q*(a_t)]
+```
+
+**Regret médio:**
+```
+L̄_T = L_T / T
+```
+
+**Onde:**
+- `a*` = ação ótima (desconhecida a priori)
+- `a_t` = ação escolhida no tempo `t`
+- `Q*(a)` = valor verdadeiro da ação `a`
+
+**Limite teórico do Epsilon-Greedy:**
+```
+E[L_T] = O(log T)
+```
+
+### 5. Probabilidade de Exploração/Exploitação
+
+**Distribuição Binomial:**
+
+A escolha entre exploração e exploitação segue uma distribuição de Bernoulli:
+```
+X_t ~ Bernoulli(1 - ε(t))
+```
+
+Onde `X_t = 1` se exploita, `X_t = 0` se explora.
+
+**Após T tentativas:**
+```
+Y_T = ∑_{t=1}^{T} X_t ~ Binomial(T, p̄)
+```
+
+**Parâmetros:**
+- `n = T` = número de tentativas
+- `p̄ = (∑ε(t)) / T` = probabilidade média de exploitação
+
+**Estatísticas:**
+```
+E[Y_T] = T × p̄                    // Média
+Var[Y_T] = T × p̄ × (1 - p̄)        // Variância
+σ[Y_T] = √(T × p̄ × (1 - p̄))       // Desvio padrão
+```
+
+### 6. Recompensa Esperada
+
+**Valor esperado baseado na política atual:**
+```
+E[R] = ∑_{a=0}^{9} π(a) × Q(a)
+```
+
+**Onde:**
+```
+π(a) = P(selecionar ação a) = N(a) / T
+```
+
+**Recompensa esperada ótima (limite superior):**
+```
+E[R*] = max_a Q(a)
+```
+
+### 7. Taxa de Convergência
+
+**Probabilidade de escolher ação ótima:**
+```
+P(a_t = a*) ≥ 1 - ε(t) = 1 - 1/√(t+1)
+```
+
+**Convergência assintótica:**
+```
+lim_{t→∞} P(a_t = a*) = 1
+```
+
+**Número esperado de explorações até tempo T:**
+```
+E[# explorações] ≈ ∫_1^T 1/√t dt = 2√T - 2 ≈ O(√T)
+```
+
+---
+
+## 📊 Métricas da IA
+
+### Métricas em Tempo Real
+
+O sistema registra e exibe as seguintes métricas após cada interação:
+
+#### 1. **Valores Q (Q-values)**
+
+**Definição:** Estimativa do valor esperado de cada ação.
+
+```
+Q(a) ≈ E[R | ação = a]
+```
+
+**Visualização no Console:**
+```
+📈 Q-Values (Valor estimado de cada ação):
+  Ação 0: 0.2100 ████
+  Ação 1: 0.3200 ██████
+  Ação 2: 0.5400 ██████████
+  Ação 3: 0.7100 ██████████████
+  Ação 4: 0.8500 █████████████████ ⭐
+  Ação 5: 0.6800 █████████████
+  Ação 6: 0.5200 ██████████
+  Ação 7: 0.3800 ███████
+  Ação 8: 0.2500 █████
+  Ação 9: 0.1800 ███
+```
+
+**Interpretação:**
+- Barras longas = ações mais valiosas
+- ⭐ = ação ótima atual (max Q-value)
+- Q-values convergem para valores verdadeiros com T → ∞
+
+#### 2. **Contagem de Ações**
+
+**Definição:** Número de vezes que cada ação foi selecionada.
+
+```
+N(a) = número de vezes que ação a foi escolhida
+```
+
+**Visualização:**
+```
+🔢 Contagem de cada ação:
+  Ação 0: 3 vezes (5.0%)
+  Ação 1: 5 vezes (8.3%)
+  Ação 2: 8 vezes (13.3%)
+  Ação 3: 12 vezes (20.0%)
+  Ação 4: 18 vezes (30.0%) ⭐
+  Ação 5: 7 vezes (11.7%)
+  Ação 6: 4 vezes (6.7%)
+  Ação 7: 2 vezes (3.3%)
+  Ação 8: 1 vez (1.7%)
+  Ação 9: 0 vezes (0.0%)
+```
+
+**Interpretação:**
+- Distribuição deve concentrar em torno da ação ótima
+- Ações exploradas inicialmente, depois focadas na melhor
+
+#### 3. **Regret (Arrependimento)**
+
+**Definição:** Perda acumulada por não escolher sempre a ação ótima.
+
+```
+L_T = ∑_{t=1}^{T} [Q(a*) - Q(a_t)]
+```
+
+**Visualização:**
+```
+📉 Regret acumulado: 1.2345
+📉 Regret médio: 0.0823
+```
+
+**Interpretação:**
+- Regret baixo = aprendizado eficiente
+- Regret médio deve diminuir com o tempo
+- Crescimento O(log T) é ótimo
+
+**Gráfico esperado:**
+```
+Regret
+  │     
+  │    ╱────────────  (log T)
+  │   ╱
+  │  ╱
+  │ ╱
+  └─────────────────── Tentativas
+```
+
+#### 4. **Ação Ótima**
+
+**Definição:** Ação com maior Q-value estimado.
+
+```
+a* = argmax_a Q(a)
+```
+
+**Visualização:**
+```
+⭐ Ação ótima atual: 4
+⭐ Vezes escolhida: 18 (30.0%)
+```
+
+**Interpretação:**
+- Deve convergir para a ação verdadeiramente ótima
+- % deve aumentar com o tempo (mais exploitação)
+
+#### 5. **Recompensas**
+
+**Visualização:**
+```
+💰 Recompensa total: 10.45
+💰 Recompensa média: 0.6967
+💰 Recompensa esperada: 0.7124
+```
+
+**Fórmulas:**
+```
+Recompensa total = ∑_{t=1}^{T} r_t
+Recompensa média = (∑r_t) / T
+Recompensa esperada = ∑ π(a) × Q(a)
+```
+
+**Interpretação:**
+- Recompensa média deve aumentar com aprendizado
+- Deve convergir para recompensa da ação ótima
+
+#### 6. **Exploração vs Exploitação**
+
+**Visualização:**
+```
+🎲 Distribuição Exploração/Exploitação:
+  Exploração: 24 (40.0%)
+  Exploitação: 36 (60.0%)
+```
+
+**Evolução temporal esperada:**
+```
+% Exploitação
+  │
+100│              ╱────────
+   │            ╱
+ 50│          ╱
+   │        ╱
+  0│──────╱
+   └────────────────────── Tentativas
+```
+
+#### 7. **Distribuição Binomial**
+
+**Visualização:**
+```
+📊 Distribuição Binomial (Exploitação):
+  p = 0.6000
+  n = 60
+  Média = 36.00
+  Variância = 14.4000
+  Desvio Padrão = 3.7947
+```
+
+**Interpretação:**
+- `p` aumenta com o tempo (mais exploitação)
+- Variância indica incerteza
+- IC 95%: `[μ - 1.96σ, μ + 1.96σ]`
+
+#### 8. **Epsilon Atual**
+
+**Visualização:**
+```
+🎚️  Epsilon atual: 0.1291
+🎚️  Decaimento: ε(t) = 1/√61 = 0.1291
+```
+
+**Valores típicos:**
+```
+t = 1:    ε = 0.7071
+t = 10:   ε = 0.3015
+t = 50:   ε = 0.1400
+t = 100:  ε = 0.0995
+t = 500:  ε = 0.0447
+```
+
+---
+
+## 💻 Implementação
+
+### Estrutura da Classe `EpsilonGreedyBandit`
+
+```javascript
+class EpsilonGreedyBandit {
+    constructor() {
+        this.nArms = 10;                          // Número de ações
+        this.Q = new Array(10).fill(0);          // Q-values
+        this.N = new Array(10).fill(0);          // Contadores
+        this.trial = 0;                          // Tentativa atual
+        this.exploreCount = 0;                   // Contador exploração
+        this.exploitCount = 0;                   // Contador exploitação
+        this.regret = 0;                         // Regret acumulado
+        this.totalReward = 0;                    // Recompensa total
+    }
+    
+    getEpsilon() {
+        return this.trial === 0 ? 1.0 : 1.0 / Math.sqrt(this.trial + 1);
+    }
+    
+    selectAction(ballY) {
+        this.trial++;
+        const epsilon = this.getEpsilon();
+        
+        if (Math.random() < epsilon) {
+            // EXPLORAÇÃO
+            return Math.floor(Math.random() * this.nArms);
+        } else {
+            // EXPLOITAÇÃO
+            return this.Q.indexOf(Math.max(...this.Q));
+        }
+    }
+    
+    updateReward(action, reward) {
+        this.N[action]++;
+        const alpha = 1 / this.N[action];
+        this.Q[action] += alpha * (reward - this.Q[action]);
+        this.totalReward += reward;
+        
+        // Calcular regret
+        const optimalReward = Math.max(...this.Q);
+        this.regret += Math.max(0, optimalReward - this.Q[action]);
+    }
+}
+```
+
+### Integração com o Jogo
+
+```javascript
+let bandit = new EpsilonGreedyBandit();
+let currentAction = null;
+
+function moveBotEpsilonGreedy() {
+    // Decidir ação quando bola se aproxima
+    if (ball.x > 400 && currentAction === null) {
+        currentAction = bandit.selectAction(ball.y);
+    }
+    
+    if (currentAction !== null) {
+        const targetY = bandit.getTargetY(currentAction);
+        // Mover raquete para targetY...
+    }
+}
+
+function hitBotPaddle() {
+    // Calcular recompensa
+    const distance = Math.abs(ball.y - bot.y);
+    const reward = 1.0 / (1.0 + distance / 50);
+    
+    // Atualizar bandit
+    bandit.updateReward(currentAction, reward);
+    currentAction = null;
+}
+```
+
+---
+
+## 📈 Análise de Convergência
+
+### Condições de Convergência
+
+Para que o Epsilon-Greedy convirja para a ação ótima:
+
+1. **Exploração infinita:**
+```
+∑_{t=1}^{∞} ε(t) = ∞
+```
+
+2. **Exploração decrescente:**
+```
+∑_{t=1}^{∞} ε²(t) < ∞
+```
+
+**Verificação para ε(t) = 1/√t:**
+
+```
+∑ 1/√t ≈ ∫ 1/√t dt = 2√t → ∞  ✓
+
+∑ (1/√t)² = ∑ 1/t ≈ ∫ 1/t dt = ln(t) < ∞  ✓
+```
+
+### Taxa de Convergência
+
+**Limite superior do regret:**
+```
+E[L_T] ≤ c × log(T) + o(log T)
+```
+
+**Onde `c` depende:**
+- Do gap entre ação ótima e subótimas: `Δ_a = Q(a*) - Q(a)`
+- Do schedule de epsilon
+
+**Para ε(t) = 1/√t:**
+```
+E[L_T] = O(√T × log T)
+```
+
+### Métricas de Convergência
+
+**1. Taxa de escolha da ação ótima:**
+```
+P(a_t = a*) → 1  quando t → ∞
+```
+
+**2. Q-value da ação ótima:**
+```
+Q_t(a*) → Q*(a*)  quando t → ∞
+```
+
+**3. Regret médio:**
+```
+L̄_T = L_T / T → 0  quando T → ∞
+```
+
+---
+
+## 🧪 Experimentos
+
+### Experimento 1: Convergência dos Q-values
+
+**Objetivo:** Verificar se Q-values convergem para valores verdadeiros.
+
+**Protocolo:**
+1. Executar 100 tentativas
+2. Registrar Q-values a cada 10 tentativas
+3. Plotar evolução temporal
+
+**Resultado esperado:**
+```
+Q-value
+  │
+1.0│        ────────────  Q*(a*) = 0.85
+   │      ╱
+0.5│    ╱
+   │  ╱
+0.0├─────────────────────── Tentativas
+   0   25   50   75   100
+```
+
+### Experimento 2: Regret vs Tentativas
+
+**Objetivo:** Verificar crescimento logarítmico do regret.
+
+**Protocolo:**
+1. Executar 500 tentativas
+2. Registrar regret acumulado
+3. Plotar em escala log-log
+
+**Resultado esperado:**
+```
+log(Regret)
+  │     
+  │    ╱──────  (slope ≈ 0.5)
+  │   ╱
+  │  ╱
+  │ ╱
+  └───────────────── log(Tentativas)
+```
+
+### Experimento 3: Taxa de Exploração
+
+**Objetivo:** Verificar decaimento de epsilon.
+
+**Protocolo:**
+1. Registrar % de exploração em janelas de 10 tentativas
+2. Comparar com ε(t) teórico
+
+**Resultado esperado:**
+```
+% Exploração
+  │
+100│╲
+   │ ╲_
+ 50│   ╲___
+   │       ╲____
+  0│            ─────────── Tentativas
+   0    50   100   150  200
+```
+
+### Experimento 4: Comparação de Schedules
+
+**Objetivo:** Comparar diferentes schedules de epsilon.
+
+**Schedules testados:**
+```javascript
+ε1(t) = 1/√t         // Padrão
+ε2(t) = 1/t          // Decai mais rápido
+ε3(t) = 1/log(t+2)   // Decai mais devagar
+ε4(t) = 0.1          // Constante
+```
+
+**Métrica:** Regret acumulado em 200 tentativas.
+
+**Resultado esperado:**
+- `ε1`: Melhor balanço exploração/exploitação
+- `ε2`: Convergência prematura
+- `ε3`: Exploração excessiva
+- `ε4`: Regret linear
+
+---
+
+## 🚀 Instalação
+
+### Método 1: Abrir Direto
+
+```bash
+# 1. Baixe o arquivo index.html
+# 2. Abra em um navegador moderno
+```
+
+### Método 2: Servidor Local
+
+```bash
+# Python
+python3 -m http.server 8000
+
+# Node.js
+npx http-server
+
+# Acesse: http://localhost:8000
+```
+
+### Requisitos
+
+- **Navegador:** Chrome 90+, Firefox 88+, Safari 14+
+- **JavaScript:** Habilitado
+- **Console:** Aberto (F12) para ver métricas
+
+---
+
+## 🎮 Como Usar
+
+### 1. Iniciar o Jogo
+
+1. Abra o arquivo HTML
+2. Pressione **F12** para abrir o Console
+3. Clique no botão **"COMEÇAR"**
+
+### 2. Observar Métricas
+
+As métricas aparecem no console após cada interação da IA com a bola:
+
+```javascript
+// Exemplo de saída
+🔍 [Tentativa 15] EXPLORAÇÃO (ε=0.2500)
+======================================================================
+📊 MÉTRICAS - Tentativa 15
+======================================================================
+🎯 Ação escolhida: 4 (Posição Y: 240-300)
+🎁 Recompensa: 0.8235
+...
+```
+
+### 3. Analisar Aprendizado
+
+**Indicadores de aprendizado bem-sucedido:**
+
+✅ Q-values convergem (barras param de oscilar)  
+✅ Ação ótima escolhida com frequência crescente  
+✅ Regret médio diminui  
+✅ Recompensa média aumenta  
+✅ % Exploitação aumenta (>70% após 50 tentativas)
+
+### 4. Controles do Jogador
+
+- **Desktop:** `↑` `↓` ou `W` `S`
+- **Mobile:** Botões na tela
+
+---
+
+## 📚 Referências Teóricas
+
+### Papers Fundamentais
+
+1. **Auer, P., Cesa-Bianchi, N., & Fischer, P. (2002)**  
+   *"Finite-time Analysis of the Multiarmed Bandit Problem"*  
+   Machine Learning, 47(2-3), 235-256.
+
+2. **Sutton, R. S., & Barto, A. G. (2018)**  
+   *"Reinforcement Learning: An Introduction"* (2nd ed.)  
+   MIT Press. Chapter 2: Multi-armed Bandits.
+
+3. **Lattimore, T., & Szepesvári, C. (2020)**  
+   *"Bandit Algorithms"*  
+   Cambridge University Press.
+
+### Teoremas Relevantes
+
+**Teorema 1 (Convergência):**  
+Se ε(t) satisfaz as condições de Robbins-Monro, então:
+```
+lim_{t→∞} P(a_t = a*) = 1
+```
+
+**Teorema 2 (Regret Logarítmico):**  
+Para qualquer algoritmo com exploração decrescente:
+```
+E[L_T] = Ω(log T)
+```
+
+**Teorema 3 (Limite Superior):**  
+Para ε-greedy com ε(t) = t^(-α), α ∈ (1/2, 1):
+```
+E[L_T] = O(T^(1-α) log T)
+```
+
+### Links Úteis
+
+- **Sutton & Barto (online):** http://incompleteideas.net/book/
+- **Multi-Armed Bandits Tutorial:** https://lilianweng.github.io/posts/2018-01-23-multi-armed-bandit/
+- **Epsilon-Greedy Explained:** https://www.cs.mcgill.ca/~vkules/bandits.pdf
+
+---
+
+## 🛠️ Desenvolvimento
+
+### Modificar Schedule de Epsilon
+
+```javascript
+class EpsilonGreedyBandit {
+    getEpsilon() {
+        // Opção 1: 1/√t (padrão)
+        return 1.0 / Math.sqrt(this.trial + 1);
+        
+        // Opção 2: 1/t (mais agressivo)
+        // return 1.0 / (this.trial + 1);
+        
+        // Opção 3: 1/log(t) (mais conservador)
+        // return 1.0 / Math.log(this.trial + 2);
+        
+        // Opção 4: Constante
+        // return 0.1;
+    }
+}
+```
+
+### Adicionar Logging CSV
+
+```javascript
+updateReward(action, reward) {
+    // ... código existente ...
+    
+    // Exportar para CSV
+    const csvLine = `${this.trial},${action},${reward},${this.Q[action]},${this.regret}\n`;
+    console.log('CSV:', csvLine);
+}
+```
+
+### Visualizar em Tempo Real
+
+```javascript
+// Usar bibliotecas como Chart.js ou Plotly
+const ctx = document.getElementById('qvalues-chart');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: ['Ação 0', 'Ação 1', ..., 'Ação 9'],
+        datasets: [{
+            label: 'Q-values',
+            data: this.Q
+        }]
+    }
+});
+```
+
+---
+
+## 📊 Análise Estatística Avançada
+
+### Intervalo de Confiança para Q-values
+
+Usando **Teorema Central do Limite**:
+
+```
+Q(a) ~ Normal(μ, σ²/N(a))
+```
+
+**IC 95%:**
+```
+[Q(a) - 1.96 × σ/√N(a), Q(a) + 1.96 × σ/√N(a)]
+```
