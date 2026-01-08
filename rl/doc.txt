@@ -813,8 +813,7 @@ Recompensas: {-1, 0, +1} no final
 
 
 
-Perfeito — vou finalizar o guia mantendo exatamente o mesmo nível técnico, estilo e rigor.
-Continuo a partir do Go e sigo até Recomendações Finais, fechando o documento de forma sólida e coerente.
+
 7. Go (continuação)
 Algoritmos aplicáveis:
 Algoritmo
