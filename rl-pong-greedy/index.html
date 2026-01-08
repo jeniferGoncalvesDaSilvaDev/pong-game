@@ -1,0 +1,648 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pong - Epsilon-Greedy AI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            margin: 0;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #000;
+            font-family: 'Courier New', monospace;
+            color: white;
+        }
+        
+        .container {
+            width: 100%;
+            max-width: 820px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        #game-container {
+            position: relative;
+            width: 100%;
+            max-width: 800px;
+            aspect-ratio: 4/3;
+            border: 3px solid #00ff00;
+            border-radius: 5px;
+            overflow: hidden;
+            background: #000;
+        }
+        
+        canvas {
+            display: block;
+            width: 100% !important;
+            height: 100% !important;
+            position: relative;
+            z-index: 1;
+        }
+        
+        .score {
+            position: absolute;
+            top: 20px;
+            width: 100%;
+            text-align: center;
+            font-size: 40px;
+            font-weight: bold;
+            color: white;
+            z-index: 10;
+        }
+        
+        .ai-stats {
+            position: absolute;
+            top: 60px;
+            left: 10px;
+            font-size: 12px;
+            color: #00ff00;
+            background: rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 10;
+            max-width: 200px;
+        }
+        
+        .controls {
+            margin-top: 20px;
+            display: flex;
+            justify-content: center;
+            gap: 30px;
+        }
+        
+        .control-btn {
+            width: 80px;
+            height: 80px;
+            font-size: 32px;
+            background: #0066ff;
+            border: none;
+            border-radius: 50%;
+            color: white;
+            cursor: pointer;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+        }
+        
+        .control-btn:active {
+            transform: scale(0.9);
+        }
+        
+        .start-screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            text-align: center;
+            padding: 20px;
+            pointer-events: auto;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+        
+        h1 {
+            font-size: 48px;
+            margin-bottom: 20px;
+            color: #00ff00;
+        }
+        
+        p {
+            font-size: 18px;
+            margin: 10px 0;
+        }
+        
+        .start-btn {
+            padding: 15px 40px;
+            font-size: 24px;
+            background: #ff0066;
+            border: none;
+            border-radius: 10px;
+            color: white;
+            cursor: pointer;
+            margin-top: 30px;
+            font-weight: bold;
+            z-index: 1001;
+            position: relative;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div id="game-container">
+            <div class="score">
+                <span id="player-score" style="color: #0066ff;">0</span> - 
+                <span id="bot-score" style="color: #ff0066;">0</span>
+            </div>
+            
+            <div class="ai-stats" id="ai-stats">
+                <div>ε: <span id="epsilon">1.00</span></div>
+                <div>Tentativa: <span id="trial">0</span></div>
+                <div>Exploração: <span id="explore">0</span></div>
+                <div>Exploitação: <span id="exploit">0</span></div>
+            </div>
+            
+            <div id="start-screen" class="start-screen">
+                <h1>PONG</h1>
+                <p>Abra o Console (F12) para ver métricas da IA</p>
+                <button id="start-btn" class="start-btn">COMEÇAR</button>
+            </div>
+        </div>
+        
+        <div class="controls">
+            <button id="up-btn" class="control-btn">↑</button>
+            <button id="down-btn" class="control-btn">↓</button>
+        </div>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/phaser/3.55.2/phaser.min.js"></script>
+    <script>
+        // ===== EPSILON-GREEDY BANDIT =====
+        class EpsilonGreedyBandit {
+            constructor() {
+                // Discretizar posições em 10 bins
+                this.nArms = 10;
+                this.Q = new Array(this.nArms).fill(0);  // Valor estimado
+                this.N = new Array(this.nArms).fill(0);  // Contagem de ações
+                this.totalReward = 0;
+                this.trial = 0;
+                this.exploreCount = 0;
+                this.exploitCount = 0;
+                this.regret = 0;
+                this.optimalArm = 4;  // Centro (bin 4 de 0-9)
+                this.rewardHistory = [];
+            }
+            
+            getEpsilon() {
+                // Epsilon decai: ε(t) = 1/√t
+                return this.trial === 0 ? 1.0 : 1.0 / Math.sqrt(this.trial + 1);
+            }
+            
+            discretize(y) {
+                // Converte posição y [0, 600] em bin [0, 9]
+                return Math.min(9, Math.floor(y / 60));
+            }
+            
+            selectAction(ballY) {
+                this.trial++;
+                const epsilon = this.getEpsilon();
+                const bin = this.discretize(ballY);
+                
+                let action;
+                if (Math.random() < epsilon) {
+                    // EXPLORAÇÃO
+                    action = Math.floor(Math.random() * this.nArms);
+                    this.exploreCount++;
+                    console.log(`🔍 [Tentativa ${this.trial}] EXPLORAÇÃO (ε=${epsilon.toFixed(4)})`);
+                } else {
+                    // EXPLOITAÇÃO
+                    action = this.Q.indexOf(Math.max(...this.Q));
+                    this.exploitCount++;
+                    console.log(`💎 [Tentativa ${this.trial}] EXPLOITAÇÃO (ε=${epsilon.toFixed(4)})`);
+                }
+                
+                return action;
+            }
+            
+            updateReward(action, reward) {
+                this.N[action]++;
+                const alpha = 1 / this.N[action];  // Learning rate
+                this.Q[action] += alpha * (reward - this.Q[action]);
+                this.totalReward += reward;
+                this.rewardHistory.push(reward);
+                
+                // Calcular regret
+                const optimalReward = this.Q[this.optimalArm];
+                const actualReward = this.Q[action];
+                this.regret += Math.max(0, optimalReward - actualReward);
+                
+                this.logMetrics(action, reward);
+            }
+            
+            logMetrics(action, reward) {
+                console.log('\n' + '='.repeat(70));
+                console.log(`📊 MÉTRICAS - Tentativa ${this.trial}`);
+                console.log('='.repeat(70));
+                
+                // Ação tomada
+                console.log(`\n🎯 Ação escolhida: ${action} (Posição Y: ${action * 60}-${(action + 1) * 60})`);
+                console.log(`🎁 Recompensa: ${reward.toFixed(2)}`);
+                
+                // Q-values
+                console.log('\n📈 Q-Values (Valor estimado de cada ação):');
+                this.Q.forEach((q, i) => {
+                    const bar = '█'.repeat(Math.max(0, Math.floor(q * 20)));
+                    const isOptimal = i === this.Q.indexOf(Math.max(...this.Q)) ? ' ⭐' : '';
+                    console.log(`  Ação ${i}: ${q.toFixed(4)} ${bar}${isOptimal}`);
+                });
+                
+                // Contagem de ações
+                console.log('\n🔢 Contagem de cada ação:');
+                this.N.forEach((n, i) => {
+                    const percent = this.trial > 0 ? (n / this.trial * 100).toFixed(1) : 0;
+                    console.log(`  Ação ${i}: ${n} vezes (${percent}%)`);
+                });
+                
+                // Regret
+                console.log(`\n📉 Regret acumulado: ${this.regret.toFixed(4)}`);
+                console.log(`📉 Regret médio: ${(this.regret / this.trial).toFixed(4)}`);
+                
+                // Ação ótima
+                const optimalAction = this.Q.indexOf(Math.max(...this.Q));
+                const optimalCount = this.N[optimalAction];
+                const optimalPercent = (optimalCount / this.trial * 100).toFixed(1);
+                console.log(`\n⭐ Ação ótima atual: ${optimalAction}`);
+                console.log(`⭐ Vezes escolhida: ${optimalCount} (${optimalPercent}%)`);
+                
+                // Recompensa esperada
+                const expectedReward = this.Q.reduce((sum, q, i) => {
+                    const prob = this.N[i] / Math.max(1, this.trial);
+                    return sum + q * prob;
+                }, 0);
+                console.log(`\n💰 Recompensa total: ${this.totalReward.toFixed(2)}`);
+                console.log(`💰 Recompensa média: ${(this.totalReward / this.trial).toFixed(4)}`);
+                console.log(`💰 Recompensa esperada: ${expectedReward.toFixed(4)}`);
+                
+                // Distribuição binomial (exploração vs exploitação)
+                const exploreProb = this.exploreCount / this.trial;
+                const exploitProb = this.exploitCount / this.trial;
+                console.log(`\n🎲 Distribuição Exploração/Exploitação:`);
+                console.log(`  Exploração: ${this.exploreCount} (${(exploreProb * 100).toFixed(1)}%)`);
+                console.log(`  Exploitação: ${this.exploitCount} (${(exploitProb * 100).toFixed(1)}%)`);
+                
+                // Estatísticas da distribuição binomial reversa
+                const p = exploitProb;
+                const n = this.trial;
+                const mean = n * p;
+                const variance = n * p * (1 - p);
+                const stdDev = Math.sqrt(variance);
+                console.log(`\n📊 Distribuição Binomial (Exploitação):`);
+                console.log(`  p = ${p.toFixed(4)}`);
+                console.log(`  n = ${n}`);
+                console.log(`  Média = ${mean.toFixed(2)}`);
+                console.log(`  Variância = ${variance.toFixed(4)}`);
+                console.log(`  Desvio Padrão = ${stdDev.toFixed(4)}`);
+                
+                // Epsilon atual
+                const epsilon = this.getEpsilon();
+                console.log(`\n🎚️  Epsilon atual: ${epsilon.toFixed(4)}`);
+                console.log(`🎚️  Decaimento: ε(t) = 1/√${this.trial + 1} = ${epsilon.toFixed(4)}`);
+                
+                console.log('='.repeat(70) + '\n');
+            }
+            
+            getTargetY(action) {
+                // Converter ação [0-9] em posição Y [0-600]
+                return action * 60 + 30;  // Centro do bin
+            }
+        }
+
+        // ===== CONFIGURAÇÃO PHASER =====
+        const config = {
+            type: Phaser.AUTO,
+            width: 800,
+            height: 600,
+            parent: 'game-container',
+            physics: {
+                default: 'arcade',
+                arcade: {
+                    gravity: { x: 0, y: 0 },
+                    debug: false
+                }
+            },
+            scene: {
+                preload: preload,
+                create: create,
+                update: update
+            },
+            scale: {
+                mode: Phaser.Scale.FIT,
+                autoCenter: Phaser.Scale.CENTER_BOTH
+            }
+        };
+
+        let game;
+        let player, bot, ball;
+        let playerScore = 0;
+        let botScore = 0;
+        let upPressed = false;
+        let downPressed = false;
+        let gameStarted = false;
+        
+        // Epsilon-Greedy
+        let bandit = new EpsilonGreedyBandit();
+        let currentAction = null;
+        let lastBallY = 300;
+
+        const PADDLE_WIDTH = 20;
+        const PADDLE_HEIGHT = 100;
+        const BALL_RADIUS = 12;
+        const PLAYER_X = 50;
+        const BOT_X = 750;
+        const PLAYER_SPEED = 8;
+        const BOT_SPEED = 6;
+        const INITIAL_BALL_SPEED = 300;
+
+        function preload() {}
+
+        function create() {
+            this.add.rectangle(400, 300, 800, 600, 0x000000);
+            
+            for (let y = 10; y < 590; y += 30) {
+                this.add.rectangle(400, y, 4, 20, 0x444444);
+            }
+            
+            player = this.add.rectangle(PLAYER_X, 300, PADDLE_WIDTH, PADDLE_HEIGHT, 0x0066ff);
+            this.physics.add.existing(player);
+            player.body.setCollideWorldBounds(true);
+            player.body.setImmovable(true);
+            
+            bot = this.add.rectangle(BOT_X, 300, PADDLE_WIDTH, PADDLE_HEIGHT, 0xff0066);
+            this.physics.add.existing(bot);
+            bot.body.setCollideWorldBounds(true);
+            bot.body.setImmovable(true);
+            
+            ball = this.add.circle(400, 300, BALL_RADIUS, 0xffffff);
+            this.physics.add.existing(ball);
+            ball.body.setCircle(BALL_RADIUS);
+            ball.body.setBounce(1, 1);
+            ball.body.setCollideWorldBounds(true, 1, 1);
+            
+            this.physics.add.collider(ball, player, hitPlayerPaddle, null, this);
+            this.physics.add.collider(ball, bot, hitBotPaddle, null, this);
+            
+            setupControls();
+            updateScore();
+            updateAIStats();
+        }
+
+        function update() {
+            if (!gameStarted) return;
+            
+            if (upPressed && player) {
+                player.y = Math.max(PADDLE_HEIGHT/2, player.y - PLAYER_SPEED);
+            }
+            if (downPressed && player) {
+                player.y = Math.min(600 - PADDLE_HEIGHT/2, player.y + PLAYER_SPEED);
+            }
+            
+            if (player && player.body) {
+                player.body.updateFromGameObject();
+            }
+            
+            moveBotEpsilonGreedy();
+            checkScore();
+        }
+
+        function moveBotEpsilonGreedy() {
+            if (!bot || !ball || !ball.body) return;
+            
+            // Decidir ação quando bola se aproxima
+            if (ball.body.velocity.x > 0 && ball.x > 400 && currentAction === null) {
+                lastBallY = ball.y;
+                currentAction = bandit.selectAction(ball.y);
+            }
+            
+            if (currentAction !== null) {
+                const targetY = bandit.getTargetY(currentAction);
+                const dy = targetY - bot.y;
+                
+                if (Math.abs(dy) > 2) {
+                    bot.y += Math.sign(dy) * Math.min(BOT_SPEED, Math.abs(dy) * 0.2);
+                }
+            } else {
+                // Voltar ao centro quando bola está longe
+                const dy = 300 - bot.y;
+                if (Math.abs(dy) > 2) {
+                    bot.y += Math.sign(dy) * Math.min(BOT_SPEED, Math.abs(dy) * 0.1);
+                }
+            }
+            
+            if (bot.body) {
+                bot.body.updateFromGameObject();
+            }
+        }
+
+        function hitPlayerPaddle(ballObj, paddle) {
+            hitPaddle(ballObj, paddle, true);
+        }
+
+        function hitBotPaddle(ballObj, paddle) {
+            hitPaddle(ballObj, paddle, false);
+            
+            // Calcular recompensa para epsilon-greedy
+            if (currentAction !== null) {
+                const distance = Math.abs(lastBallY - bot.y);
+                const reward = 1.0 / (1.0 + distance / 50);  // Recompensa inversamente proporcional à distância
+                bandit.updateReward(currentAction, reward);
+                currentAction = null;
+                updateAIStats();
+            }
+        }
+
+        function hitPaddle(ballObj, paddle, isPlayer) {
+            if (!ballObj || !paddle || !ballObj.body) return;
+            
+            const relativeY = (ballObj.y - paddle.y) / (PADDLE_HEIGHT / 2);
+            const bounceAngle = relativeY * (Math.PI / 4);
+            const currentSpeed = Math.sqrt(
+                ballObj.body.velocity.x ** 2 + 
+                ballObj.body.velocity.y ** 2
+            );
+            const direction = isPlayer ? 1 : -1;
+            
+            ballObj.body.setVelocity(
+                Math.cos(bounceAngle) * direction * currentSpeed,
+                Math.sin(bounceAngle) * currentSpeed
+            );
+        }
+
+        function checkScore() {
+            if (!ball) return;
+            
+            if (ball.x - BALL_RADIUS <= 0) {
+                botScore++;
+                
+                // Penalidade por perder
+                if (currentAction !== null) {
+                    bandit.updateReward(currentAction, -1.0);
+                    currentAction = null;
+                    updateAIStats();
+                }
+                
+                updateScore();
+                resetBall();
+            }
+            
+            if (ball.x + BALL_RADIUS >= 800) {
+                playerScore++;
+                updateScore();
+                resetBall();
+            }
+        }
+
+        function startGame() {
+            const startScreen = document.getElementById('start-screen');
+            if (startScreen) {
+                startScreen.classList.add('hidden');
+            }
+            gameStarted = true;
+            
+            console.log('\n🎮 JOGO INICIADO - Epsilon-Greedy Bandit');
+            console.log('📊 Métricas serão exibidas no console após cada interação\n');
+            
+            setTimeout(() => {
+                launchBall();
+            }, 500);
+        }
+
+        function launchBall() {
+            if (!ball || !ball.body) return;
+            
+            const angle = (Math.random() - 0.5) * Math.PI * 0.5;
+            const directionX = Math.random() > 0.5 ? 1 : -1;
+            
+            ball.body.setVelocity(
+                Math.cos(angle) * directionX * INITIAL_BALL_SPEED,
+                Math.sin(angle) * INITIAL_BALL_SPEED
+            );
+        }
+
+        function resetBall() {
+            if (!ball || !ball.body) return;
+            
+            ball.setPosition(400, 300);
+            ball.body.setVelocity(0, 0);
+            currentAction = null;
+            
+            if (game && game.scene && game.scene.scenes[0]) {
+                game.scene.scenes[0].time.delayedCall(1000, () => {
+                    if (gameStarted) {
+                        launchBall();
+                    }
+                });
+            }
+        }
+
+        function updateScore() {
+            const playerScoreElem = document.getElementById('player-score');
+            const botScoreElem = document.getElementById('bot-score');
+            
+            if (playerScoreElem) playerScoreElem.textContent = playerScore;
+            if (botScoreElem) botScoreElem.textContent = botScore;
+        }
+
+        function updateAIStats() {
+            document.getElementById('epsilon').textContent = bandit.getEpsilon().toFixed(4);
+            document.getElementById('trial').textContent = bandit.trial;
+            document.getElementById('explore').textContent = bandit.exploreCount;
+            document.getElementById('exploit').textContent = bandit.exploitCount;
+        }
+
+        function setupControls() {
+            const upBtn = document.getElementById('up-btn');
+            const downBtn = document.getElementById('down-btn');
+            const startBtn = document.getElementById('start-btn');
+            
+            const activateUp = () => {
+                if (gameStarted) {
+                    upPressed = true;
+                    if (upBtn) upBtn.style.background = '#0055dd';
+                }
+            };
+            
+            const deactivateUp = () => {
+                upPressed = false;
+                if (upBtn) upBtn.style.background = '#0066ff';
+            };
+            
+            if (upBtn) {
+                upBtn.addEventListener('mousedown', activateUp);
+                upBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    activateUp();
+                });
+                upBtn.addEventListener('mouseup', deactivateUp);
+                upBtn.addEventListener('mouseleave', deactivateUp);
+                upBtn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    deactivateUp();
+                });
+            }
+            
+            const activateDown = () => {
+                if (gameStarted) {
+                    downPressed = true;
+                    if (downBtn) downBtn.style.background = '#0055dd';
+                }
+            };
+            
+            const deactivateDown = () => {
+                downPressed = false;
+                if (downBtn) downBtn.style.background = '#0066ff';
+            };
+            
+            if (downBtn) {
+                downBtn.addEventListener('mousedown', activateDown);
+                downBtn.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    activateDown();
+                });
+                downBtn.addEventListener('mouseup', deactivateDown);
+                downBtn.addEventListener('mouseleave', deactivateDown);
+                downBtn.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    deactivateDown();
+                });
+            }
+            
+            if (startBtn) {
+                startBtn.addEventListener('click', startGame);
+            }
+            
+            document.addEventListener('keydown', (e) => {
+                if (e.code === 'Space' && !gameStarted) {
+                    startGame();
+                }
+                if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    activateUp();
+                }
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    activateDown();
+                }
+            });
+            
+            document.addEventListener('keyup', (e) => {
+                if (e.code === 'ArrowUp' || e.code === 'KeyW') {
+                    deactivateUp();
+                }
+                if (e.code === 'ArrowDown' || e.code === 'KeyS') {
+                    deactivateDown();
+                }
+            });
+        }
+
+        window.addEventListener('DOMContentLoaded', () => {
+            game = new Phaser.Game(config);
+        });
+    </script>
+</body>
+  </html>
