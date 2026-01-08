@@ -1,12 +1,24 @@
 {
   "name": "pong-game",
   "version": "1.0.0",
-  "description": "Jogo Pong clássico com IA",
-  "main": "index.html",
+  "description": "Jogo Pong clássico com IA - Web Service",
+  "main": "server.js",
   "scripts": {
-    "start": "echo 'Static site - no server needed'"
+    "start": "node server.js",
+    "dev": "nodemon server.js"
   },
-  "keywords": ["pong", "game", "phaser"],
-  "author": "Seu Nome",
-  "license": "MIT"
+  "keywords": ["pong", "game", "phaser", "nodejs"],
+  "author": "Jenifer Goncalves da Silva",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "compression": "^1.7.4",
+    "helmet": "^7.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.2"
+  }
 }
