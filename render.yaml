@@ -1,58 +1,61 @@
 # render.yaml - Configuração para deploy no Render.com
+# Web Service com servidor Node.js para servir o jogo
 
 services:
-  # Serviço web estático para hospedar o jogo Pong
   - type: web
     name: pong-game
-    env: static
-    buildCommand: echo "No build required - static HTML"
-    staticPublishPath: .
+    env: node
+    region: oregon  # ou 'frankfurt' para Europa
+    plan: free
     
-    # Configurações do serviço
-    plan: free  # Plano gratuito do Render
-    region: oregon  # Região do servidor (ou 'frankfurt' para Europa)
+    # Comando para instalar dependências
+    buildCommand: npm install
     
-    # Domínio personalizado (opcional)
-    # domains:
-    #   - pong-game.com
+    # Comando para iniciar o servidor
+    startCommand: node server.js
+    
+    # Configurações de saúde
+    healthCheckPath: /
+    
+    # Auto-deploy do GitHub
+    autoDeploy: true
+    
+    # Variáveis de ambiente
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 10000  # Porta padrão do Render (não alterar)
+      - key: GAME_VERSION
+        value: "1.0.0"
     
     # Headers de segurança
     headers:
       - path: /*
         name: X-Frame-Options
-        value: SAMEORIGIN
+        value: DENY
       - path: /*
         name: X-Content-Type-Options
         value: nosniff
       - path: /*
         name: Referrer-Policy
         value: strict-origin-when-cross-origin
-    
-    # Rotas
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
-    
-    # Variables de ambiente (se necessário)
-    envVars:
-      - key: NODE_ENV
-        value: production
-      - key: GAME_VERSION
-        value: "1.0.0"
+      - path: /*
+        name: Content-Security-Policy
+        value: default-src 'self' https://cdnjs.cloudflare.com; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline'
+      - path: /static/*
+        name: Cache-Control
+        value: public, max-age=31536000, immutable
 
-# Configurações adicionais
-# Se você tiver um backend Node.js no futuro:
-#
-# - type: web
-#   name: pong-api
-#   env: node
-#   buildCommand: npm install
-#   startCommand: npm start
+# Configuração opcional de banco de dados (para futuras features como ranking)
+# databases:
+#   - name: pong-db
+#     databaseName: pong_game
+#     user: pong_user
+#     plan: free
+
+# Configuração opcional de Redis (para leaderboard em tempo real)
+# - type: redis
+#   name: pong-cache
 #   plan: free
-#   
-#   envVars:
-#     - key: PORT
-#       value: 3000
-#     - key: DATABASE_URL
-#       sync: false  # Sincronizar do dashboard do Render
+#   maxmemoryPolicy: allkeys-lru
