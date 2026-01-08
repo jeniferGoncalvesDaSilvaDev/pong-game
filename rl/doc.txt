@@ -1,0 +1,980 @@
+# 🎮 Guia Completo: Escolhendo Algoritmos de RL para Jogos
+
+## 📋 Índice
+
+- [Introdução](#introdução)
+- [Taxonomia de Ambientes](#taxonomia-de-ambientes)
+- [Algoritmos de RL](#algoritmos-de-rl)
+- [Comparação por Jogo](#comparação-por-jogo)
+- [Matriz de Decisão](#matriz-de-decisão)
+- [Análise de Convergência](#análise-de-convergência)
+- [Casos de Uso Práticos](#casos-de-uso-práticos)
+- [Recomendações](#recomendações)
+
+---
+
+## 🎯 Introdução
+
+Este documento apresenta uma análise comparativa de **algoritmos de Reinforcement Learning** aplicados a diferentes tipos de jogos, explicando **quando** e **por que** usar cada abordagem.
+
+### Princípio Fundamental
+
+```
+Complexidade do Algoritmo ≈ Complexidade do Problema
+```
+
+**Lei de Occam aplicada a RL:**
+> Use o algoritmo mais simples que resolva o problema adequadamente.
+
+---
+
+## 🗂️ Taxonomia de Ambientes
+
+### Características dos Ambientes
+
+| Característica | Descrição | Exemplos |
+|----------------|-----------|----------|
+| **Espaço de estados** | Tamanho do conjunto de estados possíveis | Pequeno: Tic-Tac-Toe; Grande: Go |
+| **Espaço de ações** | Número de ações possíveis | Discreto: Pong; Contínuo: Robótica |
+| **Estacionariedade** | Dinâmica do ambiente muda? | Estacionário: Pong; Não: Trading |
+| **Observabilidade** | Agente vê todo estado? | Total: Xadrez; Parcial: Poker |
+| **Horizonte temporal** | Número de passos até recompensa | Curto: Pong; Longo: StarCraft |
+| **Determinismo** | Mesma ação → mesmo resultado? | Determinístico: Go; Estocástico: Poker |
+| **Recompensa** | Tipo de feedback | Esparsa: Xadrez; Densa: Pong |
+
+### Classificação de Ambientes
+
+#### Tipo 1: Multi-Armed Bandit (MAB)
+```
+✓ Sem estado (stateless)
+✓ Ação → Recompensa imediata
+✓ Sem transições de estado
+✓ Estacionário
+```
+
+**Exemplos:** Slot machines, Pong Bot (posição), Seleção de anúncios
+
+#### Tipo 2: MDP Simples
+```
+✓ Estados discretos (< 10⁴)
+✓ Ações discretas (< 100)
+✓ Transições determinísticas ou pouco estocásticas
+✓ Horizonte curto (< 100 passos)
+```
+
+**Exemplos:** GridWorld, Frozen Lake, Tic-Tac-Toe
+
+#### Tipo 3: MDP Complexo
+```
+✓ Estados grandes (10⁴ - 10⁶)
+✓ Ações discretas ou contínuas
+✓ Transições complexas
+✓ Horizonte médio (100 - 1000 passos)
+```
+
+**Exemplos:** CartPole, LunarLander, Pong (completo)
+
+#### Tipo 4: MDP Contínuo
+```
+✓ Estados contínuos (dimensão alta)
+✓ Ações contínuas
+✓ Física complexa
+✓ Horizonte médio-longo
+```
+
+**Exemplos:** Robótica, Controle de veículos, Humanoid
+
+#### Tipo 5: Jogos Estratégicos
+```
+✓ Estados enormes (> 10⁶)
+✓ Planejamento de longo prazo
+✓ Adversário inteligente
+✓ Observabilidade parcial (às vezes)
+```
+
+**Exemplos:** Xadrez, Go, Poker, StarCraft
+
+#### Tipo 6: Ambientes Não-Estacionários
+```
+✓ Dinâmica muda ao longo do tempo
+✓ Distribuição de recompensas muda
+✓ Conceito drift
+```
+
+**Exemplos:** Trading financeiro, Publicidade online, Jogos com patches
+
+---
+
+## 🤖 Algoritmos de RL
+
+### 1. Epsilon-Greedy (ε-greedy)
+
+**Categoria:** Multi-Armed Bandit
+
+**Pseudocódigo:**
+```python
+Initialize: Q(a) = 0, N(a) = 0 for all a
+for t = 1, 2, 3, ...:
+    ε = 1/√t
+    if random() < ε:
+        a = random_action()     # Exploração
+    else:
+        a = argmax_a Q(a)       # Exploitação
+    
+    Observe reward r
+    N(a) += 1
+    Q(a) += (1/N(a)) × [r - Q(a)]
+```
+
+**Complexidade:**
+- Tempo: O(K) por decisão (K = # ações)
+- Espaço: O(K)
+
+**Convergência:**
+```
+E[Regret] = O(log T)
+```
+
+**Prós:**
+- ✅ Extremamente simples
+- ✅ Sem hiperparâmetros críticos
+- ✅ Convergência garantida
+- ✅ Interpretável
+
+**Contras:**
+- ❌ Apenas para problemas sem estado (MAB)
+- ❌ Não funciona em MDPs
+- ❌ Exploração ineficiente em espaços grandes
+
+**Quando usar:**
+- Espaço de ações pequeno (< 50)
+- Sem dependência temporal
+- Feedback imediato
+- Ambiente estacionário
+
+---
+
+### 2. Upper Confidence Bound (UCB)
+
+**Categoria:** Multi-Armed Bandit (optimista)
+
+**Pseudocódigo:**
+```python
+Initialize: Q(a) = 0, N(a) = 0 for all a
+for t = 1, 2, 3, ...:
+    UCB(a) = Q(a) + c × √(log(t) / N(a))
+    a = argmax_a UCB(a)
+    
+    Observe reward r
+    N(a) += 1
+    Q(a) += (1/N(a)) × [r - Q(a)]
+```
+
+**Parâmetro:** `c` (tipicamente `c = √2`)
+
+**Convergência:**
+```
+E[Regret] = O(log T)   (mas com constantes menores que ε-greedy)
+```
+
+**Prós:**
+- ✅ Melhor que ε-greedy em regret
+- ✅ Não precisa ajustar ε
+- ✅ Exploração inteligente (otimismo)
+
+**Contras:**
+- ❌ Apenas para MAB
+- ❌ Mais complexo que ε-greedy
+- ❌ Sensível ao parâmetro `c`
+
+**Quando usar:**
+- Quando ε-greedy seria adequado, mas você quer menor regret
+- Espaço pequeno de ações
+- Recompensas com distribuições diferentes
+
+---
+
+### 3. Thompson Sampling
+
+**Categoria:** Multi-Armed Bandit (Bayesiano)
+
+**Pseudocódigo:**
+```python
+Initialize: α(a) = 1, β(a) = 1 for all a  # Beta priors
+for t = 1, 2, 3, ...:
+    for each action a:
+        θ(a) ~ Beta(α(a), β(a))
+    
+    a = argmax_a θ(a)
+    
+    Observe reward r ∈ {0, 1}
+    if r == 1:
+        α(a) += 1
+    else:
+        β(a) += 1
+```
+
+**Convergência:**
+```
+E[Regret] = O(log T)
+```
+
+**Prós:**
+- ✅ Exploração probabilística natural
+- ✅ Muito eficiente na prática
+- ✅ Funciona bem com recompensas binárias
+- ✅ Sem hiperparâmetros
+
+**Contras:**
+- ❌ Apenas para MAB
+- ❌ Requer conhecimento de distribuições
+- ❌ Mais complexo de implementar
+
+**Quando usar:**
+- Recompensas binárias ou Gaussianas
+- Quando tem prior sobre distribuições
+- Quer melhor performance que UCB
+
+---
+
+### 4. Q-Learning
+
+**Categoria:** Value-based, Off-policy, Tabular
+
+**Equação de Bellman:**
+```
+Q(s,a) ← Q(s,a) + α[r + γ max_a' Q(s',a') - Q(s,a)]
+```
+
+**Pseudocódigo:**
+```python
+Initialize: Q(s,a) = 0 for all s, a
+for episode = 1, 2, ...:
+    s = initial_state()
+    while not done:
+        a = ε-greedy(Q[s])
+        s', r, done = env.step(a)
+        
+        Q[s,a] += α × [r + γ × max_a' Q[s',a'] - Q[s,a]]
+        s = s'
+```
+
+**Complexidade:**
+- Tempo: O(|S| × |A|) por episódio
+- Espaço: O(|S| × |A|)
+
+**Convergência:**
+```
+Q(s,a) → Q*(s,a)  quando t → ∞
+(sob condições de Robbins-Monro)
+```
+
+**Prós:**
+- ✅ Funciona em MDPs
+- ✅ Off-policy (aprende política ótima independente da exploração)
+- ✅ Garantia de convergência
+- ✅ Simples de implementar
+
+**Contras:**
+- ❌ Apenas estados discretos pequenos
+- ❌ Não escala (curse of dimensionality)
+- ❌ Convergência lenta em espaços grandes
+
+**Quando usar:**
+- Estados discretos (< 10⁴)
+- Ações discretas (< 100)
+- Transições estocásticas
+- Horizonte curto-médio
+
+---
+
+### 5. SARSA
+
+**Categoria:** Value-based, On-policy, Tabular
+
+**Equação:**
+```
+Q(s,a) ← Q(s,a) + α[r + γ Q(s',a') - Q(s,a)]
+```
+
+**Diferença de Q-Learning:**
+- Q-Learning: usa `max_a' Q(s',a')` (política ótima)
+- SARSA: usa `Q(s',a')` onde `a'` foi realmente tomada (política atual)
+
+**Prós:**
+- ✅ Mais conservador que Q-Learning
+- ✅ Melhor em ambientes com penalidades altas
+- ✅ Considera exploração na atualização
+
+**Contras:**
+- ❌ Mesmas limitações de Q-Learning
+- ❌ Convergência mais lenta
+
+**Quando usar:**
+- Ambientes perigosos (cliff walking)
+- Quando política de exploração importa
+- Precisa de comportamento conservador
+
+---
+
+### 6. Deep Q-Network (DQN)
+
+**Categoria:** Value-based, Off-policy, Deep Learning
+
+**Inovações:**
+1. **Experience Replay:** Buffer de transições (s,a,r,s')
+2. **Target Network:** Rede separada para targets estáveis
+3. **Approximador:** Rede neural ao invés de tabela
+
+**Pseudocódigo:**
+```python
+Initialize: Q_θ (online), Q_θ' (target), Replay Buffer D
+for episode = 1, 2, ...:
+    s = initial_state()
+    while not done:
+        a = ε-greedy(Q_θ[s])
+        s', r, done = env.step(a)
+        D.store(s, a, r, s', done)
+        
+        # Sample minibatch
+        batch = D.sample(batch_size)
+        
+        # Compute targets
+        y = r + γ × max_a' Q_θ'[s',a']
+        
+        # Update Q-network
+        loss = (y - Q_θ[s,a])²
+        θ ← θ - α∇loss
+        
+        # Update target network (periodically)
+        if t % C == 0:
+            θ' ← θ
+        
+        s = s'
+```
+
+**Complexidade:**
+- Tempo: O(batch_size × forward_pass)
+- Espaço: O(|D| + |θ|)
+
+**Prós:**
+- ✅ Funciona em espaços contínuos de estados
+- ✅ Pode processar imagens (CNN)
+- ✅ Melhor que tabular em estados grandes
+- ✅ Compartilha features entre estados
+
+**Contras:**
+- ❌ Apenas ações discretas
+- ❌ Instável (requer tricks)
+- ❌ Hiper-sensível a hiperparâmetros
+- ❌ Sample inefficient
+
+**Quando usar:**
+- Estados contínuos ou alta dimensão
+- Ações discretas
+- Tem muitos dados (milhões de frames)
+- Pode treinar por dias
+
+---
+
+### 7. Policy Gradient (REINFORCE)
+
+**Categoria:** Policy-based, On-policy
+
+**Objetivo:**
+```
+J(θ) = E_π[∑ γ^t r_t]
+```
+
+**Gradiente:**
+```
+∇J(θ) = E_π[∇log π_θ(a|s) × Q^π(s,a)]
+```
+
+**Pseudocódigo:**
+```python
+Initialize: π_θ (policy network)
+for episode = 1, 2, ...:
+    τ = sample_trajectory(π_θ)  # (s_0,a_0,r_0,...,s_T)
+    
+    # Compute returns
+    G_t = ∑_{t'=t}^T γ^(t'-t) × r_t'
+    
+    # Update policy
+    for t in range(T):
+        θ ← θ + α × ∇log π_θ(a_t|s_t) × G_t
+```
+
+**Prós:**
+- ✅ Funciona com ações contínuas
+- ✅ Pode aprender políticas estocásticas
+- ✅ Garante convergência (local mínima)
+- ✅ Melhor para alta dimensão de ações
+
+**Contras:**
+- ❌ Alta variância
+- ❌ Sample inefficient
+- ❌ Convergência lenta
+- ❌ Sensível a learning rate
+
+**Quando usar:**
+- Ações contínuas
+- Política estocástica necessária
+- Espaço de ações muito grande
+
+---
+
+### 8. Actor-Critic (A2C/A3C)
+
+**Categoria:** Híbrido (Policy + Value)
+
+**Componentes:**
+1. **Actor:** Política π_θ(a|s)
+2. **Critic:** Função valor V_φ(s) ou Q_φ(s,a)
+
+**Vantagem:**
+```
+A(s,a) = Q(s,a) - V(s) = r + γV(s') - V(s)
+```
+
+**Pseudocódigo:**
+```python
+Initialize: π_θ (actor), V_φ (critic)
+for episode = 1, 2, ...:
+    s = initial_state()
+    while not done:
+        a ~ π_θ(·|s)
+        s', r, done = env.step(a)
+        
+        # TD error (advantage)
+        δ = r + γV_φ(s') - V_φ(s)
+        
+        # Update critic
+        φ ← φ - α_v × ∇(δ²)
+        
+        # Update actor
+        θ ← θ + α_π × ∇log π_θ(a|s) × δ
+        
+        s = s'
+```
+
+**Prós:**
+- ✅ Menor variância que REINFORCE
+- ✅ Ações contínuas ou discretas
+- ✅ Mais sample efficient que PG puro
+- ✅ Online learning
+
+**Contras:**
+- ❌ Duas redes para treinar
+- ❌ Mais hiperparâmetros
+- ❌ Pode ser instável
+
+**Quando usar:**
+- Quer vantagens de PG com menor variância
+- Ações contínuas ou discretas
+- Tem recursos computacionais
+
+---
+
+### 9. Proximal Policy Optimization (PPO)
+
+**Categoria:** Policy-based, On-policy, State-of-the-art
+
+**Objetivo clipped:**
+```
+L^CLIP(θ) = E[min(r_t(θ)×A_t, clip(r_t(θ), 1-ε, 1+ε)×A_t)]
+```
+
+**Onde:**
+```
+r_t(θ) = π_θ(a_t|s_t) / π_θ_old(a_t|s_t)
+```
+
+**Prós:**
+- ✅ SOTA em muitos benchmarks
+- ✅ Estável (limita updates)
+- ✅ Ações contínuas ou discretas
+- ✅ Relativamente robusto
+
+**Contras:**
+- ❌ Complexo de implementar
+- ❌ Muitos hiperparâmetros
+- ❌ On-policy (menos sample efficient)
+
+**Quando usar:**
+- Problemas complexos de controle
+- Tem recursos computacionais
+- Quer estado-da-arte
+
+---
+
+### 10. Soft Actor-Critic (SAC)
+
+**Categoria:** Off-policy, Maximum entropy RL
+
+**Objetivo:**
+```
+J(π) = ∑_t E[(r_t + α H(π(·|s_t)))]
+```
+
+**Entropia:** `H(π) = -E[log π(a|s)]`
+
+**Prós:**
+- ✅ Sample efficient (off-policy)
+- ✅ Muito estável
+- ✅ Ações contínuas
+- ✅ Exploração automática (entropia)
+
+**Contras:**
+- ❌ Muito complexo
+- ❌ Apenas ações contínuas
+- ❌ Custoso computacionalmente
+
+**Quando usar:**
+- Robótica
+- Controle contínuo
+- Precisa de estabilidade
+
+---
+
+### 11. AlphaZero / MCTS
+
+**Categoria:** Planning, Tree Search
+
+**Componentes:**
+1. **Monte Carlo Tree Search (MCTS)**
+2. **Neural Network:** (política + valor)
+3. **Self-play**
+
+**Pseudocódigo MCTS:**
+```python
+def mcts(root_state, num_simulations):
+    tree = {root_state: Node()}
+    
+    for _ in range(num_simulations):
+        node = root_state
+        path = [node]
+        
+        # 1. Selection (UCB)
+        while not is_leaf(node):
+            node = select_child(node, UCB_score)
+            path.append(node)
+        
+        # 2. Expansion
+        if not terminal(node):
+            expand(node)
+            node = random_child(node)
+            path.append(node)
+        
+        # 3. Simulation
+        value = rollout(node)
+        
+        # 4. Backpropagation
+        for n in reversed(path):
+            update_stats(n, value)
+            value = -value  # adversarial
+    
+    return best_action(root_state)
+```
+
+**Prós:**
+- ✅ Melhor para jogos estratégicos
+- ✅ Planejamento explícito
+- ✅ Anytime algorithm
+- ✅ Encontra soluções ótimas
+
+**Contras:**
+- ❌ Computacionalmente caro
+- ❌ Precisa de simulador
+- ❌ Não funciona em tempo real
+- ❌ Apenas ambientes determinísticos
+
+**Quando usar:**
+- Jogos de tabuleiro (Xadrez, Go)
+- Planejamento perfeito necessário
+- Tem tempo para computação
+
+---
+
+## 🎮 Comparação por Jogo
+
+### 1. Pong (Bot - apenas posição)
+
+**Características do ambiente:**
+```
+Tipo: Multi-Armed Bandit
+Estados: Stateless (apenas Y da bola)
+Ações: 10 posições discretas
+Horizonte: 1 passo
+Recompensas: Densas, imediatas
+Estacionário: Sim
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **ε-greedy** | ⭐⭐⭐⭐⭐ | PERFEITO - MAB clássico, converge em ~20 tentativas |
+| **UCB** | ⭐⭐⭐⭐ | Bom - Menor regret que ε-greedy, mas overhead desnecessário |
+| **Thompson** | ⭐⭐⭐⭐ | Bom - Eficiente, mas complexo demais para o problema |
+| **Q-Learning** | ⭐⭐ | OVERKILL - Não há estado, framework MDP desnecessário |
+| **DQN** | ⭐ | ABSURDO - Como usar canhão para matar mosca |
+| **PPO** | ⭐ | ABSURDO - Complexidade injustificada |
+
+**Melhor escolha:** ✅ **ε-greedy**
+
+**Convergência esperada:**
+```
+Tentativas:  10    20    30    50
+Precisão:    60%   80%   90%   95%
+```
+
+**Código de referência:** Veja implementação acima no jogo.
+
+---
+
+### 2. Pong (Completo - jogo inteiro)
+
+**Características do ambiente:**
+```
+Tipo: MDP Complexo
+Estados: (x_bola, y_bola, vx, vy, y_jogador, y_bot)
+Ações: 3 (cima, baixo, parado)
+Horizonte: ~100 passos por episódio
+Recompensas: Esparsas (+1/-1 no gol)
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **Q-Learning** | ⭐⭐⭐ | OK - Se discretizar estados, funciona mas lento |
+| **DQN** | ⭐⭐⭐⭐⭐ | EXCELENTE - Benchmark clássico, converge bem |
+| **Policy Gradient** | ⭐⭐⭐ | OK - Funciona mas alta variância |
+| **A3C** | ⭐⭐⭐⭐ | Bom - Mais estável que PG, paralelizável |
+| **PPO** | ⭐⭐⭐⭐ | Bom - SOTA mas overkill para Pong |
+
+**Melhor escolha:** ✅ **DQN** (clássico) ou **A3C** (moderno)
+
+**Dificuldades:**
+- Recompensas esparsas → Precisa de muitos episódios
+- Exploração inicial ruim → Nunca marca ponto = não aprende
+- Solução: **Curriculum learning** ou **reward shaping**
+
+---
+
+### 3. CartPole
+
+**Características:**
+```
+Tipo: MDP Simples
+Estados: (x, ẋ, θ, θ̇) - 4D contínuo
+Ações: 2 (esquerda, direita)
+Horizonte: ~200 passos
+Recompensas: +1 por passo
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **Q-Learning** | ⭐⭐ | Ruim - Precisa discretizar estados contínuos |
+| **DQN** | ⭐⭐⭐⭐ | Bom - Funciona bem, benchmark comum |
+| **Policy Gradient** | ⭐⭐⭐⭐ | Bom - Alta variância mas resolve |
+| **A3C** | ⭐⭐⭐⭐⭐ | EXCELENTE - Baixa variância, rápido |
+| **PPO** | ⭐⭐⭐⭐⭐ | EXCELENTE - SOTA, muito estável |
+
+**Melhor escolha:** ✅ **PPO** ou **A3C**
+
+**Convergência:**
+```
+DQN:  ~500 episódios
+A3C:  ~300 episódios
+PPO:  ~200 episódios
+```
+
+---
+
+### 4. Atari Games (ex: Breakout)
+
+**Características:**
+```
+Tipo: MDP Complexo, Visual
+Estados: 84×84×4 pixels (frames)
+Ações: 4-18 (depende do jogo)
+Horizonte: ~1000 frames
+Recompensas: Variável (jogo-dependente)
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **DQN** | ⭐⭐⭐⭐⭐ | LANDMARK - Paper original, funciona |
+| **Double DQN** | ⭐⭐⭐⭐⭐ | Melhor - Corrige overestimation |
+| **Rainbow DQN** | ⭐⭐⭐⭐⭐ | SOTA (value) - Combina 6 melhorias |
+| **A3C** | ⭐⭐⭐⭐ | Bom - Paralelização importante |
+| **PPO** | ⭐⭐⭐⭐ | Bom - Mais sample efficient que A3C |
+| **MuZero** | ⭐⭐⭐⭐⭐ | SOTA - Aprende modelo + planning |
+
+**Melhor escolha:** ✅ **Rainbow DQN** (value-based) ou **PPO** (policy-based)
+
+**Desafios:**
+- Milhões de frames necessários
+- Dias/semanas de treinamento
+- Precisa de GPUs potentes
+
+---
+
+### 5. LunarLander
+
+**Características:**
+```
+Tipo: MDP Complexo, Contínuo
+Estados: 8D (x, y, vx, vy, θ, ω, leg1, leg2)
+Ações: 4 discretas OU contínuas
+Horizonte: ~300 passos
+Recompensas: Shaped (distância, velocidade, pouso)
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **DQN** | ⭐⭐⭐⭐ | Bom - Versão discreta funciona bem |
+| **PPO** | ⭐⭐⭐⭐⭐ | EXCELENTE - Estável, versão contínua |
+| **SAC** | ⭐⭐⭐⭐⭐ | EXCELENTE - Ações contínuas, sample efficient |
+| **TD3** | ⭐⭐⭐⭐ | Bom - Ações contínuas, menos variância |
+
+**Melhor escolha:** 
+- Ações discretas: ✅ **DQN** ou **PPO**
+- Ações contínuas: ✅ **SAC** ou **TD3**
+
+---
+
+### 6. Xadrez
+
+**Características:**
+```
+Tipo: Jogo Estratégico, Adversarial
+Estados: ~10⁴⁰ posições legais
+Ações: ~35 médias por posição
+Horizonte: ~40 movimentos (80 plies)
+Recompensas: {-1, 0, +1} no final
+Determinístico: Sim
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **Minimax + αβ** | ⭐⭐⭐⭐ | Clássico - Stockfish usa (não RL) |
+| **MCTS** | ⭐⭐⭐ | OK - Sem heurística é fraco |
+| **AlphaZero** | ⭐⭐⭐⭐⭐ | SOTA - Superhuman, self-play |
+| **MuZero** | ⭐⭐⭐⭐⭐ | SOTA - Aprende regras também |
+| **DQN/PPO** | ⭐ | PÉSSIMO - Espaço de ações gigante |
+
+**Melhor escolha:** ✅ **AlphaZero** (RL) ou **Stockfish** (clássico)
+
+**Por que RL "simples" falha:**
+- Espaço de ações enorme (~35 por estado)
+- Horizonte longo (decisões afetam 20+ movimentos)
+- Recompensa apenas no final (sparse)
+- Precisa de planejamento profundo
+
+**AlphaZero solve isso com:**
+1. MCTS para planejamento
+2. Rede neural para heurística
+3. Self-play para dados
+4. Milhões de jogos
+
+---
+
+### 7. Go
+
+**Características:**
+```
+Tipo: Jogo Estratégico, Adversarial
+Estados: ~10¹⁷⁰ posições legais
+Ações: ~250 médias (19×19 = 361 possíveis)
+Horizonte: ~150 movimentos
+Recompensas: {-1, 0, +1} no final
+```
+
+**Algoritmos aplicáveis:**
+
+| Algoritmo | Score | Justificativa |
+|-----------|-------|---------------|
+| **MCTS** | ⭐⭐⭐ | OK - Melhor que minimax em Go |
+| **AlphaGo** | ⭐⭐⭐⭐⭐ | MARCO - Venceu humanos |
+| **AlphaGo Zero** | ⭐⭐⭐⭐⭐ | Melhor - Self-play puro |
+| **KataGo** | ⭐⭐⭐⭐
+
+
+
+
+Perfeito — vou finalizar o guia mantendo exatamente o mesmo nível técnico, estilo e rigor.
+Continuo a partir do Go e sigo até Recomendações Finais, fechando o documento de forma sólida e coerente.
+7. Go (continuação)
+Algoritmos aplicáveis:
+Algoritmo
+Score
+Justificativa
+MCTS puro
+⭐⭐⭐
+Funciona melhor que minimax, mas fraco sem boa heurística
+AlphaGo
+⭐⭐⭐⭐⭐
+Marco histórico — policy + value + self-play
+AlphaGo Zero
+⭐⭐⭐⭐⭐
+Self-play puro, supera AlphaGo original
+KataGo
+⭐⭐⭐⭐⭐
+SOTA atual — melhor eficiência, múltiplos objetivos
+DQN / PPO
+⭐
+Inviável — espaço de ações e horizonte gigantes
+Por que KataGo é superior hoje?
+KataGo melhora AlphaZero em vários pontos:
+🎯 Treino multi-objetivo (não só win/loss)
+🧠 Melhor uso de dados (menos partidas que AlphaZero)
+⚙️ Arquitetura refinada
+📉 Menor custo computacional
+Melhor escolha: ✅ KataGo (estado da arte atual em Go)
+📊 Matriz de Decisão (Resumo Geral)
+Escolha rápida do algoritmo
+Tipo de Ambiente
+Melhor Algoritmo
+Alternativa
+MAB simples
+ε-greedy
+UCB
+MAB com prior
+Thompson Sampling
+UCB
+MDP pequeno (discreto)
+Q-Learning
+SARSA
+MDP médio (discreto)
+DQN
+Double DQN
+Estados contínuos
+PPO
+A2C
+Ações contínuas
+SAC
+TD3
+Visual (Atari)
+Rainbow DQN
+PPO
+Estratégico (tabuleiro)
+AlphaZero
+MCTS
+Não-estacionário
+Bandits adaptativos
+Meta-RL
+📉 Análise de Convergência (Comparativa)
+Velocidade vs Estabilidade
+Algoritmo
+Velocidade
+Estabilidade
+Sample Efficiency
+ε-greedy
+⭐⭐⭐⭐⭐
+⭐⭐⭐⭐⭐
+⭐⭐⭐⭐
+UCB
+⭐⭐⭐⭐
+⭐⭐⭐⭐⭐
+⭐⭐⭐⭐
+Q-Learning
+⭐⭐⭐
+⭐⭐⭐⭐
+⭐⭐
+SARSA
+⭐⭐
+⭐⭐⭐⭐⭐
+⭐⭐
+DQN
+⭐⭐⭐
+⭐⭐
+⭐
+A3C
+⭐⭐⭐⭐
+⭐⭐⭐
+⭐⭐
+PPO
+⭐⭐⭐⭐
+⭐⭐⭐⭐
+⭐⭐⭐
+SAC
+⭐⭐⭐⭐
+⭐⭐⭐⭐⭐
+⭐⭐⭐⭐
+AlphaZero
+⭐
+⭐⭐⭐⭐⭐
+⭐
+Regra prática de convergência
+Copiar código
+
+Ambiente simples  → Algoritmo simples
+Ambiente complexo → Planejamento + Deep RL
+🧪 Casos de Uso Práticos
+🎮 Jogos Indie / Simulações simples
+GridWorld, Pong simples
+✅ ε-greedy, Q-learning
+🤖 Simulações físicas
+CartPole, LunarLander
+✅ PPO, SAC
+🕹️ Jogos visuais
+Atari, plataformas
+✅ DQN, PPO
+♟️ Jogos estratégicos
+Xadrez, Go
+✅ AlphaZero, KataGo
+💹 Ambientes mutáveis
+Trading, jogos com patch
+✅ Thompson Sampling, Meta-RL
+🧠 Recomendações Finais (A Parte Mais Importante)
+1️⃣ Nunca comece com Deep RL
+80% dos problemas em jogos não precisam de redes neurais.
+Comece sempre com:
+Bandits
+Q-learning
+SARSA
+Depois escale.
+2️⃣ Se você consegue desenhar a tabela Q, use Q-learning
+Se |S| × |A| < 10⁶, deep RL é desperdício.
+3️⃣ Planejamento vence aprendizado puro
+Em jogos estratégicos:
+AlphaZero > PPO
+MCTS > DQN
+Porque pensar > reagir.
+4️⃣ Exploração é o verdadeiro problema
+A maioria dos fracassos em RL vem de:
+Recompensa esparsa
+Exploração ruim
+Use:
+Reward shaping
+Curriculum learning
+Entropy (SAC / PPO)
+5️⃣ Lei de Ouro do RL em Jogos
+Copiar código
+
+Se seu agente não aprende:
+→ O problema NÃO é o algoritmo
+→ É o ambiente, recompensa ou observação
+🏁 Conclusão
+Este guia fornece um mapa mental completo para escolher algoritmos de RL em jogos:
+Não existe algoritmo universal
+Complexidade deve ser justificada
+Planejamento + RL vence força bruta
+Simplicidade é poder
+Se quiser, posso:
+🎯 Criar um fluxograma visual de decisão
+🧩 Montar roadmap prático por nível
+🕹️ Aplicar isso diretamente no seu jogo em Phaser
+🤖 Ajudar a projetar o ambiente certo para RL
+É só dizer como quer continuar.
